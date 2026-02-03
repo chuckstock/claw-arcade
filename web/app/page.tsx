@@ -26,7 +26,7 @@ export default function Home() {
           On-chain games on Base Sepolia
         </p>
         <p className="text-sm text-lobster-blue/70 mb-8">
-          🧪 Testnet — Get $CLAW from the deployer to play
+          🧪 Testnet — Pay with ETH, 5% goes to $ZER0_AI buyback & burn
         </p>
       </section>
 
@@ -41,7 +41,7 @@ export default function Home() {
           <p>Built by Zer0 🦞</p>
           <p className="mt-1">
             <a 
-              href="https://sepolia.basescan.org/address/0x6468dDde375dFeF55239c00B3049B1bb97646E65" 
+              href="https://sepolia.basescan.org/address/0x07AC36e2660FFfFAA26CFCEE821889Eb2945b47B" 
               target="_blank" 
               rel="noopener noreferrer"
               className="underline hover:text-lobster-dark"

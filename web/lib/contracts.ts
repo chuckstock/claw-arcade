@@ -3,60 +3,15 @@ import { baseSepolia } from 'wagmi/chains';
 export const CHAIN = baseSepolia;
 
 export const CONTRACTS = {
-  clawToken: '0x8BB8CaE058527C7e0d4E90Cc30abaC396604634a' as const,
-  clawFlip: '0x6468dDde375dFeF55239c00B3049B1bb97646E65' as const,
+  clawFlipETH: '0x07AC36e2660FFfFAA26CFCEE821889Eb2945b47B' as const,
 };
 
-export const CLAW_TOKEN_ABI = [
+export const CLAW_FLIP_ETH_ABI = [
   {
-    inputs: [{ name: 'account', type: 'address' }],
-    name: 'balanceOf',
-    outputs: [{ type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { name: 'spender', type: 'address' },
-      { name: 'amount', type: 'uint256' },
-    ],
-    name: 'approve',
-    outputs: [{ type: 'bool' }],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { name: 'owner', type: 'address' },
-      { name: 'spender', type: 'address' },
-    ],
-    name: 'allowance',
-    outputs: [{ type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [],
-    name: 'symbol',
-    outputs: [{ type: 'string' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [],
-    name: 'decimals',
-    outputs: [{ type: 'uint8' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-] as const;
-
-export const CLAW_FLIP_ABI = [
-  {
-    inputs: [{ name: 'entryFee', type: 'uint256' }],
+    inputs: [{ name: 'referrer', type: 'address' }],
     name: 'enterGame',
     outputs: [],
-    stateMutability: 'nonpayable',
+    stateMutability: 'payable',
     type: 'function',
   },
   {
@@ -86,6 +41,7 @@ export const CLAW_FLIP_ABI = [
           { name: 'flipIndex', type: 'uint256' },
           { name: 'startTime', type: 'uint64' },
           { name: 'roundId', type: 'uint256' },
+          { name: 'referrer', type: 'address' },
           { name: 'active', type: 'bool' },
         ],
         type: 'tuple',
@@ -121,7 +77,19 @@ export const CLAW_FLIP_ABI = [
   },
   {
     inputs: [],
-    name: 'getCurrentRoundId',
+    name: 'getStats',
+    outputs: [
+      { name: '_totalBuybackAccumulated', type: 'uint256' },
+      { name: '_totalBuybackExecuted', type: 'uint256' },
+      { name: '_totalPrizesDistributed', type: 'uint256' },
+      { name: '_currentBuybackBalance', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'buybackAccumulator',
     outputs: [{ type: 'uint256' }],
     stateMutability: 'view',
     type: 'function',
@@ -136,26 +104,6 @@ export const CLAW_FLIP_ABI = [
       { indexed: false, name: 'newStreak', type: 'uint256' },
     ],
     name: 'FlipResult',
-    type: 'event',
-  },
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: 'player', type: 'address' },
-      { indexed: false, name: 'entryFee', type: 'uint256' },
-      { indexed: false, name: 'roundId', type: 'uint256' },
-    ],
-    name: 'GameStarted',
-    type: 'event',
-  },
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: 'player', type: 'address' },
-      { indexed: false, name: 'finalStreak', type: 'uint256' },
-      { indexed: false, name: 'roundId', type: 'uint256' },
-    ],
-    name: 'GameEnded',
     type: 'event',
   },
 ] as const;

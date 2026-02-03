@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { formatEther, parseEther } from 'viem';
-import { CONTRACTS, CLAW_TOKEN_ABI, CLAW_FLIP_ABI } from '@/lib/contracts';
+import { CONTRACTS, CLAW_FLIP_ETH_ABI } from '@/lib/contracts';
 
 type GameSession = {
   player: string;
@@ -13,6 +13,7 @@ type GameSession = {
   flipIndex: bigint;
   startTime: bigint;
   roundId: bigint;
+  referrer: string;
   active: boolean;
 };
 
@@ -24,84 +25,73 @@ type RoundInfo = {
   settled: boolean;
 };
 
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
 export function ClawFlip() {
   const { address, isConnected } = useAccount();
-  const [wagerAmount, setWagerAmount] = useState('10');
+  const [wagerAmount, setWagerAmount] = useState('0.001');
+  const [referrer, setReferrer] = useState('');
   const [isFlipping, setIsFlipping] = useState(false);
   const [lastResult, setLastResult] = useState<{ won: boolean; choice: string } | null>(null);
 
-  // Read CLAW balance
-  const { data: clawBalance, refetch: refetchBalance } = useReadContract({
-    address: CONTRACTS.clawToken,
-    abi: CLAW_TOKEN_ABI,
-    functionName: 'balanceOf',
-    args: address ? [address] : undefined,
-  });
-
-  // Read allowance
-  const { data: allowance, refetch: refetchAllowance } = useReadContract({
-    address: CONTRACTS.clawToken,
-    abi: CLAW_TOKEN_ABI,
-    functionName: 'allowance',
-    args: address ? [address, CONTRACTS.clawFlip] : undefined,
+  // Read ETH balance
+  const { data: ethBalance, refetch: refetchBalance } = useBalance({
+    address: address,
   });
 
   // Read game session
   const { data: session, refetch: refetchSession } = useReadContract({
-    address: CONTRACTS.clawFlip,
-    abi: CLAW_FLIP_ABI,
+    address: CONTRACTS.clawFlipETH,
+    abi: CLAW_FLIP_ETH_ABI,
     functionName: 'getSession',
     args: address ? [address] : undefined,
   }) as { data: GameSession | undefined; refetch: () => void };
 
   // Read current round
   const { data: currentRound, refetch: refetchRound } = useReadContract({
-    address: CONTRACTS.clawFlip,
-    abi: CLAW_FLIP_ABI,
+    address: CONTRACTS.clawFlipETH,
+    abi: CLAW_FLIP_ETH_ABI,
     functionName: 'getCurrentRound',
   }) as { data: RoundInfo | undefined; refetch: () => void };
 
+  // Read buyback stats
+  const { data: buybackBalance } = useReadContract({
+    address: CONTRACTS.clawFlipETH,
+    abi: CLAW_FLIP_ETH_ABI,
+    functionName: 'buybackAccumulator',
+  });
+
   // Write contracts
-  const { writeContract: approve, data: approveHash } = useWriteContract();
   const { writeContract: enterGame, data: enterHash } = useWriteContract();
   const { writeContract: flip, data: flipHash } = useWriteContract();
   const { writeContract: cashOut, data: cashOutHash } = useWriteContract();
 
   // Wait for transactions
-  const { isLoading: isApproving } = useWaitForTransactionReceipt({ hash: approveHash });
   const { isLoading: isEntering } = useWaitForTransactionReceipt({ hash: enterHash });
   const { isLoading: isFlippingTx } = useWaitForTransactionReceipt({ hash: flipHash });
   const { isLoading: isCashingOut } = useWaitForTransactionReceipt({ hash: cashOutHash });
 
   // Refetch on transaction completion
   useEffect(() => {
-    if (approveHash || enterHash || flipHash || cashOutHash) {
+    if (enterHash || flipHash || cashOutHash) {
       const timer = setTimeout(() => {
         refetchBalance();
-        refetchAllowance();
         refetchSession();
         refetchRound();
         setIsFlipping(false);
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [approveHash, enterHash, flipHash, cashOutHash]);
-
-  const handleApprove = () => {
-    approve({
-      address: CONTRACTS.clawToken,
-      abi: CLAW_TOKEN_ABI,
-      functionName: 'approve',
-      args: [CONTRACTS.clawFlip, parseEther('1000000')],
-    });
-  };
+  }, [enterHash, flipHash, cashOutHash]);
 
   const handleEnterGame = () => {
+    const ref = referrer && referrer.startsWith('0x') ? referrer as `0x${string}` : ZERO_ADDRESS;
     enterGame({
-      address: CONTRACTS.clawFlip,
-      abi: CLAW_FLIP_ABI,
+      address: CONTRACTS.clawFlipETH,
+      abi: CLAW_FLIP_ETH_ABI,
       functionName: 'enterGame',
-      args: [parseEther(wagerAmount)],
+      args: [ref],
+      value: parseEther(wagerAmount),
     });
   };
 
@@ -109,8 +99,8 @@ export function ClawFlip() {
     setIsFlipping(true);
     setLastResult({ won: false, choice: heads ? 'HEADS' : 'TAILS' });
     flip({
-      address: CONTRACTS.clawFlip,
-      abi: CLAW_FLIP_ABI,
+      address: CONTRACTS.clawFlipETH,
+      abi: CLAW_FLIP_ETH_ABI,
       functionName: 'flip',
       args: [heads],
     });
@@ -118,15 +108,14 @@ export function ClawFlip() {
 
   const handleCashOut = () => {
     cashOut({
-      address: CONTRACTS.clawFlip,
-      abi: CLAW_FLIP_ABI,
+      address: CONTRACTS.clawFlipETH,
+      abi: CLAW_FLIP_ETH_ABI,
       functionName: 'cashOut',
     });
   };
 
-  const needsApproval = allowance !== undefined && allowance < parseEther(wagerAmount || '0');
   const isInGame = session?.active;
-  const isLoading = isApproving || isEntering || isFlippingTx || isCashingOut;
+  const isLoading = isEntering || isFlippingTx || isCashingOut;
 
   if (!isConnected) {
     return (
@@ -143,9 +132,9 @@ export function ClawFlip() {
       {/* Balance Display */}
       <div className="bg-white rounded-xl p-6 shadow-lg mb-6">
         <div className="flex justify-between items-center">
-          <span className="text-lobster-blue">Your $CLAW Balance</span>
+          <span className="text-lobster-blue">Your ETH Balance</span>
           <span className="text-2xl font-bold text-lobster-dark">
-            {clawBalance ? Number(formatEther(clawBalance)).toLocaleString() : '0'} 🦞
+            {ethBalance ? Number(formatEther(ethBalance.value)).toFixed(4) : '0'} ETH
           </span>
         </div>
       </div>
@@ -160,34 +149,40 @@ export function ClawFlip() {
               Call it right, extend your streak. Daily winner takes the pot!
             </p>
             
-            <div className="mb-6">
-              <label className="block text-sm text-lobster-blue mb-2">Wager Amount ($CLAW)</label>
+            <div className="mb-4">
+              <label className="block text-sm text-lobster-blue mb-2">Wager Amount (ETH)</label>
               <input
                 type="number"
                 value={wagerAmount}
                 onChange={(e) => setWagerAmount(e.target.value)}
                 className="w-full px-4 py-3 rounded-lg border-2 border-lobster-light focus:border-lobster-red outline-none text-center text-2xl font-bold"
-                min="10"
+                min="0.001"
+                step="0.001"
               />
             </div>
 
-            {needsApproval ? (
-              <button
-                onClick={handleApprove}
-                disabled={isLoading}
-                className="w-full py-4 bg-lobster-blue text-white rounded-xl font-bold text-lg hover:bg-lobster-dark transition disabled:opacity-50"
-              >
-                {isApproving ? 'Approving...' : 'Approve $CLAW'}
-              </button>
-            ) : (
-              <button
-                onClick={handleEnterGame}
-                disabled={isLoading}
-                className="w-full py-4 bg-lobster-red text-white rounded-xl font-bold text-lg hover:bg-red-700 transition disabled:opacity-50"
-              >
-                {isEntering ? 'Entering...' : '🦞 Enter Game'}
-              </button>
-            )}
+            <div className="mb-6">
+              <label className="block text-sm text-lobster-blue mb-2">Referrer (optional)</label>
+              <input
+                type="text"
+                value={referrer}
+                onChange={(e) => setReferrer(e.target.value)}
+                placeholder="0x..."
+                className="w-full px-4 py-2 rounded-lg border-2 border-lobster-light focus:border-lobster-blue outline-none text-sm font-mono"
+              />
+            </div>
+
+            <button
+              onClick={handleEnterGame}
+              disabled={isLoading}
+              className="w-full py-4 bg-lobster-red text-white rounded-xl font-bold text-lg hover:bg-red-700 transition disabled:opacity-50"
+            >
+              {isEntering ? 'Entering...' : '🦞 Enter Game'}
+            </button>
+            
+            <p className="text-xs text-lobster-blue mt-4">
+              Fee split: 88% prize pool • 5% buyback • 5% treasury • 2% referrer
+            </p>
           </div>
         ) : (
           /* In Game */
@@ -243,12 +238,12 @@ export function ClawFlip() {
 
       {/* Round Info */}
       {currentRound && (
-        <div className="bg-white rounded-xl p-6 shadow-lg">
+        <div className="bg-white rounded-xl p-6 shadow-lg mb-6">
           <h3 className="text-lg font-bold text-lobster-dark mb-4">📊 Today's Round</h3>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-lobster-blue">Prize Pool</span>
-              <div className="font-bold">{Number(formatEther(currentRound.prizePool)).toFixed(2)} $CLAW</div>
+              <div className="font-bold">{Number(formatEther(currentRound.prizePool)).toFixed(4)} ETH</div>
             </div>
             <div>
               <span className="text-lobster-blue">Players</span>
@@ -261,12 +256,25 @@ export function ClawFlip() {
             <div>
               <span className="text-lobster-blue">Leader</span>
               <div className="font-bold font-mono text-xs">
-                {currentRound.leader === '0x0000000000000000000000000000000000000000' 
+                {currentRound.leader === ZERO_ADDRESS
                   ? 'None yet' 
                   : `${currentRound.leader.slice(0, 6)}...${currentRound.leader.slice(-4)}`}
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Buyback Stats */}
+      {buybackBalance !== undefined && (
+        <div className="bg-gradient-to-r from-lobster-dark to-lobster-blue rounded-xl p-6 shadow-lg text-white">
+          <h3 className="text-lg font-bold mb-2">🔥 $ZER0_AI Buyback Fund</h3>
+          <div className="text-2xl font-bold">
+            {Number(formatEther(buybackBalance as bigint)).toFixed(4)} ETH
+          </div>
+          <p className="text-xs opacity-75 mt-2">
+            Accumulated for weekly buyback & burn
+          </p>
         </div>
       )}
     </div>
