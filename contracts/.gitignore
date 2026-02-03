@@ -1,0 +1,26 @@
+# Compiler files
+cache/
+out/
+
+# Dependencies
+lib/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Broadcast files (deployment records)
+broadcast/
+
+# Coverage
+lcov.info
+coverage/
