@@ -4,35 +4,54 @@ Smart contracts for the Lobster Arcade gaming platform on Base L2.
 
 ## Games
 
-### 🎰 Claw Flip
+### 🎰 Claw Flip ETH v2 (RECOMMENDED)
 A coinflip streak game where the longest daily streak wins the prize pool.
 
 **How it works:**
-1. Pay entry fee in $CLAW (90% → prize pool, 10% → treasury)
-2. Receive VRF randomness (256 bits = 256 potential flips)
+1. Pay entry fee in ETH
+   - 88% → Prize Pool
+   - 5% → Buyback Accumulator (for $ZER0_AI buyback & burn)
+   - 5% → Treasury (operations)
+   - 2% → Referrer (or buyback if no referrer)
+2. Request Chainlink VRF randomness (wait for callback)
 3. Call HEADS or TAILS repeatedly until you lose
 4. Longest daily streak wins 70% of the prize pool
-5. 30% rolls over to the next day
+5. 30% rolls over to the next day (100% if no winner)
 
 ## Contracts
 
-| Contract | Description |
-|----------|-------------|
-| `ClawToken.sol` | $CLAW ERC20 token with mint/burn |
-| `ClawFlip.sol` | Main coinflip game with Chainlink VRF |
+| Contract | Description | Status |
+|----------|-------------|--------|
+| `ClawFlipETHv2.sol` | **Main ETH coinflip game with security fixes** | ✅ Recommended |
+| `ClawFlipETH.sol` | Legacy ETH game (insecure RNG) | ⚠️ Deprecated |
+| `ClawFlipSimple.sol` | Simple version for reference | 🧪 Testing only |
+| `ClawToken.sol` | $CLAW ERC20 token | ✅ Production |
+
+## v2 Security Fixes
+
+ClawFlipETHv2 includes critical security improvements over v1:
+
+| Fix | Issue | Solution |
+|-----|-------|----------|
+| **#1 Chainlink VRF** | Predictable RNG using blockhash | Chainlink VRF V2.5 for provably fair randomness |
+| **#2 Pull Pattern** | Settlement DoS if winner reverts | Failed transfers store in `unclaimedPrizes`, winners call `claimPrize()` |
+| **#3 No-Winner Rollover** | Only 30% rolled over when no winner | 100% rollover when `leader == address(0)` |
+| **#4 Referral Accounting** | Earnings updated before transfer | Only update `referralEarnings` AFTER successful transfer |
+| **#5 Emergency Safeguards** | Could drain active prize pools | 3-day timelock + excludes active prize pools |
+| **#6 Max Flips Auto-End** | Player stuck at 256 flips | Auto-end game when `flipIndex` reaches 256 |
+| **#7 Zero Address Checks** | Missing validation | `require(_treasury != address(0))` in constructor and setters |
 
 ## Setup
 
 ### Prerequisites
 
 - [Foundry](https://book.getfoundry.sh/getting-started/installation)
-- Node.js 18+ (for scripts)
+- Chainlink VRF subscription (create at [vrf.chain.link](https://vrf.chain.link))
 
 ### Install Dependencies
 
 ```bash
-# Clone and enter directory
-cd arcade/contracts
+cd contracts
 
 # Install Foundry dependencies
 forge install OpenZeppelin/openzeppelin-contracts@v5.0.1 --no-commit
@@ -58,8 +77,9 @@ BASE_MAINNET_RPC_URL=https://mainnet.base.org
 # Chainlink VRF Subscription ID (create at vrf.chain.link)
 VRF_SUBSCRIPTION_ID=1234
 
-# Treasury address (receives 10% of entry fees)
-TREASURY_ADDRESS=0x...
+# Optional overrides
+TREASURY_ADDRESS=0x...  # defaults to deployer
+MIN_ENTRY=1000000000000000  # 0.001 ETH in wei
 
 # For verification
 BASESCAN_API_KEY=your_api_key_here
@@ -71,11 +91,11 @@ BASESCAN_API_KEY=your_api_key_here
 # Run all tests
 forge test
 
-# Run with verbosity
-forge test -vvv
+# Run v2 tests with verbosity
+forge test --match-contract ClawFlipETHv2Test -vvv
 
 # Run specific test
-forge test --match-test test_Flip_Win -vvv
+forge test --match-test test_PullPattern -vvv
 
 # Gas report
 forge test --gas-report
@@ -83,6 +103,20 @@ forge test --gas-report
 # Coverage
 forge coverage
 ```
+
+### Test Coverage
+
+The v2 test suite covers:
+- ✅ VRF integration (seed not exposed, multiple players, waiting for seed)
+- ✅ Pull pattern (failed transfers, claimPrize)
+- ✅ No-winner 100% rollover
+- ✅ Referral accounting (after-transfer updates)
+- ✅ Emergency withdraw (timelock, prize pool exclusion)
+- ✅ Max flips auto-end at 256
+- ✅ Zero address validation
+- ✅ Settlement edge cases
+- ✅ Timeout functionality
+- ✅ Fee distribution
 
 ## Deployment
 
@@ -92,24 +126,29 @@ forge coverage
 # Load environment
 source .env
 
-# Dry run (simulation)
-forge script script/Deploy.s.sol:Deploy --rpc-url $BASE_SEPOLIA_RPC_URL
-
-# Deploy and verify
-forge script script/Deploy.s.sol:Deploy \
+# Deploy v2 contract
+forge script script/DeployETHv2.s.sol:DeployETHv2Script \
   --rpc-url $BASE_SEPOLIA_RPC_URL \
   --broadcast \
   --verify
 ```
 
+### Local Development (Anvil)
+
+```bash
+# Start anvil
+anvil
+
+# Deploy with mock VRF
+forge script script/DeployETHv2.s.sol:DeployETHv2LocalScript \
+  --rpc-url http://localhost:8545 \
+  --broadcast
+```
+
 ### Base Mainnet
 
 ```bash
-# Set mainnet flag
-export MAINNET=true
-
-# Deploy
-forge script script/Deploy.s.sol:Deploy \
+forge script script/DeployETHv2.s.sol:DeployETHv2Script \
   --rpc-url $BASE_MAINNET_RPC_URL \
   --broadcast \
   --verify
@@ -117,92 +156,72 @@ forge script script/Deploy.s.sol:Deploy \
 
 ### Post-Deployment
 
-**Important:** After deploying, you must add the ClawFlip contract as a consumer to your Chainlink VRF subscription:
+**IMPORTANT:** After deploying, add the contract as a VRF consumer:
 
 1. Go to [vrf.chain.link](https://vrf.chain.link)
 2. Connect wallet
 3. Select your subscription
 4. Click "Add Consumer"
-5. Enter the ClawFlip contract address
-6. Fund the subscription with LINK or ETH
+5. Enter the ClawFlipETHv2 contract address
+6. Fund the subscription with LINK
 
-## Contract Addresses
+## VRF Configuration
 
 ### Base Sepolia
-
-| Contract | Address |
-|----------|---------|
-| ClawToken | `TBD` |
-| ClawFlip | `TBD` |
+| Parameter | Value |
+|-----------|-------|
+| VRF Coordinator | `0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE` |
+| Key Hash (500 gwei) | `0x9e9e46732b32662b9adc6f3abdf6c5e926a666d174a4d6b8e39c4cca76a38897` |
 
 ### Base Mainnet
+| Parameter | Value |
+|-----------|-------|
+| VRF Coordinator | `0xd5D517aBE5cF79B7e95eC98dB0f0277788aFF634` |
+| Key Hash (500 gwei) | `0xdc2f87677b01473c763cb0aee938ed3b6a23c9f5a54a0d6d3a1e6fb5f3b1e3f9` |
 
-| Contract | Address |
-|----------|---------|
-| ClawToken | `TBD` |
-| ClawFlip | `TBD` |
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        CLAW FLIP SYSTEM                         │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐      │
-│  │   $CLAW      │───▶│  ClawFlip    │◀───│  Chainlink   │      │
-│  │   Token      │    │  Game        │    │  VRF v2.5    │      │
-│  └──────────────┘    └──────────────┘    └──────────────┘      │
-│                              │                                  │
-│                              ▼                                  │
-│                      ┌──────────────┐                          │
-│                      │   Daily      │                          │
-│                      │   Rounds     │                          │
-│                      └──────────────┘                          │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-## Game State Machine
+## Game Flow (v2)
 
 ```
 ┌─────────┐     enterGame()      ┌─────────┐
-│  IDLE   │ ─────────────────▶   │ WAITING │  (waiting for VRF)
+│  IDLE   │ ─────────────────▶   │ WAITING │  (VRF requested)
 └─────────┘                      └─────────┘
                                       │
                             fulfillRandomWords()
                                       ▼
                                 ┌─────────┐
                                 │ PLAYING │ ◀─────┐
-                                └─────────┘       │ (win)
+                                └─────────┘       │ (win, flipIndex < 256)
                                       │          │
                                 flip(HEADS/TAILS)
                                       │
-                         ┌────────────┴────────────┐
-                         ▼                         ▼
-                   ┌─────────┐              ┌───────────┐
-                   │  LOSE   │              │ CONTINUE  │
-                   └─────────┘              └───────────┘
-                         │                         │
-                  endGame()                   flip()...
-                         │
-                         ▼
-                   Record Streak
-                   Update Leaderboard
+                    ┌─────────────────┼─────────────────┐
+                    ▼                 ▼                 ▼
+              ┌─────────┐      ┌───────────┐     ┌──────────┐
+              │  LOSE   │      │ CONTINUE  │     │ MAX FLIPS│
+              └─────────┘      └───────────┘     │  (256)   │
+                    │                            └──────────┘
+                    │                                  │
+                    └──────────────┬───────────────────┘
+                                   ▼
+                            Record Streak
+                            Update Leaderboard
+                            Clear Seed
 ```
 
 ## Security
 
 ### Audit Status
-- [ ] Internal review
+- [x] Internal review (v2 fixes)
 - [ ] External audit
 
-### Key Security Features
+### Key Security Features (v2)
 - **Chainlink VRF v2.5** for provably fair randomness
+- **Pull pattern** for DoS-resistant prize distribution
+- **Timelocked emergency withdraw** protects player funds
 - **ReentrancyGuard** on all external functions
-- **Pausable** for emergency stops
-- **SafeERC20** for token transfers
+- **Zero address validation** throughout
 - **1-hour timeout** to prevent game griefing
+- **Random seed never exposed** via any getter
 
 ## License
 

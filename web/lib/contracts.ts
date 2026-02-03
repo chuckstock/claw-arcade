@@ -29,6 +29,20 @@ export const CLAW_FLIP_ETH_ABI = [
     type: 'function',
   },
   {
+    inputs: [],
+    name: 'claimPrize',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ name: 'player', type: 'address' }],
+    name: 'getUnclaimedPrize',
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
     inputs: [{ name: 'player', type: 'address' }],
     name: 'getSession',
     outputs: [
@@ -37,12 +51,12 @@ export const CLAW_FLIP_ETH_ABI = [
           { name: 'player', type: 'address' },
           { name: 'entryFee', type: 'uint256' },
           { name: 'streak', type: 'uint256' },
-          { name: 'randomSeed', type: 'uint256' },
           { name: 'flipIndex', type: 'uint256' },
           { name: 'startTime', type: 'uint64' },
           { name: 'roundId', type: 'uint256' },
           { name: 'referrer', type: 'address' },
           { name: 'active', type: 'bool' },
+          { name: 'seedReady', type: 'bool' },
         ],
         type: 'tuple',
       },
@@ -94,6 +108,7 @@ export const CLAW_FLIP_ETH_ABI = [
     stateMutability: 'view',
     type: 'function',
   },
+  // Events
   {
     anonymous: false,
     inputs: [
@@ -104,6 +119,43 @@ export const CLAW_FLIP_ETH_ABI = [
       { indexed: false, name: 'newStreak', type: 'uint256' },
     ],
     name: 'FlipResult',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: 'player', type: 'address' },
+      { indexed: true, name: 'requestId', type: 'uint256' },
+    ],
+    name: 'RandomnessRequested',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: 'player', type: 'address' },
+      { indexed: true, name: 'requestId', type: 'uint256' },
+    ],
+    name: 'RandomnessFulfilled',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: 'player', type: 'address' },
+      { indexed: false, name: 'amount', type: 'uint256' },
+    ],
+    name: 'PrizeClaimed',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, name: 'player', type: 'address' },
+      { indexed: false, name: 'amount', type: 'uint256' },
+      { indexed: true, name: 'roundId', type: 'uint256' },
+    ],
+    name: 'PrizeAwarded',
     type: 'event',
   },
 ] as const;
