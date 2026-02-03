@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground: #1D3557;
+  --background: #F1FAEE;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.coin {
+  perspective: 1000px;
+}
+
+.coin-inner {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  transition: transform 0.6s;
+  transform-style: preserve-3d;
+}
+
+.coin-inner.flipping {
+  animation: coinFlip 0.6s ease-in-out;
+}
+
+@keyframes coinFlip {
+  0% { transform: rotateY(0deg); }
+  100% { transform: rotateY(720deg); }
+}
+
+.coin-face {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  font-weight: bold;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.coin-heads {
+  background: linear-gradient(135deg, #E63946 0%, #c62828 100%);
+  color: white;
+}
+
+.coin-tails {
+  background: linear-gradient(135deg, #457B9D 0%, #1D3557 100%);
+  color: white;
+  transform: rotateY(180deg);
+}
